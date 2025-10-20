@@ -175,4 +175,45 @@ Service detection performed. Please report any incorrect results at https://nmap
 Nmap done: 1 IP address (1 host up) scanned in 145.54 seconds
 ```
 
+## Access Controls ICO R-Services
+
+- Primary concern for r-services is the access controls in place for it, or lack there of. Primary authentication is through PAM (Pluggable Authentication Module) however there is a way for that to be bypassed, and that is through the use of */etc/hosts.equiv* and *.rhosts* files on the system. 
+
+Sample .rhosts file:
+```
+realCustampin@htb[/htb]$ cat .rhosts
+
+htb-student     10.0.17.5
++               10.0.17.10
++               +
+```
+
+As we can see from this example, both files follow the specific syntax of `<username> <ip address>` or `<username> <hostname>` pairs. Additionally, the `+` modifier can be used within these files as a wildcard to specify anything. In this example, the `+` modifier allows any external user to access r-commands from the `htb-student` user account via the host with the IP address `10.0.17.10`.
+
+**Using Rlogin to login:**
+
+```
+realCustampin@htb[/htb]$ rlogin 10.0.17.2 -l htb-student
+
+Last login: Fri Dec  2 16:11:21 from localhost
+
+[htb-student@localhost ~]$
+```
+
+
+**Using rwho to list interactive sessions:**
+```
+realCustampin@htb[/htb]$ rwho
+
+root     web01:pts/0 Dec  2 21:34
+htb-student     workstn01:tty1  Dec  2 19:57  2:25
+```
+
+**Listing Authenticated Users Using Rusers:**
+
+```
+realCustampin@htb[/htb]$ rusers -al 10.0.17.5
+
+htb-student     10.0.17.5:console          Dec 2 19:57     2:25
+```
 
