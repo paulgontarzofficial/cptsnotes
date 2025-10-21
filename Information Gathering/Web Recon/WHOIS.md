@@ -105,3 +105,8 @@ We can see that we got some key details, let's break it down:
 	- `A.NS.FACEBOOK.COM`, `B.NS.FACEBOOK.COM`, `C.NS.FACEBOOK.COM`, `D.NS.FACEBOOK.COM`
 
 ## !!!Complete the Labs!!!
+
+1. Perform a WHOIS lookup against the paypal.com domain. What is the registrar Internet Assigned Numbers Authority (IANA) ID number?
+	1. 292
+2. What is the admin email contact for the tesla.com domain (also in-scope for the Tesla bug bounty program)?
+	1. admin@dnstinations.com
