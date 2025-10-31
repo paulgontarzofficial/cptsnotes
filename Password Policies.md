@@ -1,0 +1,1 @@
+- Password Policies are a set of rules designed to enhance cimputer security by encouraging users to create strong passwords. 
