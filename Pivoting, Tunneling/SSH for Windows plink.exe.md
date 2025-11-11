@@ -1,0 +1,13 @@
+Plink which is short for PuTTY Link, is acommand-line SSH tool that comes as a part of the PuTTY package when installed. 
+
+![[Pasted image 20251104205446.png]]
+
+Imagine that we are on a pentest and gain access to a Windows machine. We quickly enumerate the host and its security posture and determine that it is moderately locked down. We need to use this host as a pivot point, but it is unlikely that we will be able to pull our own tools onto the host without being exposed. Instead, we can live off the land and use what is already there. If the host is older and PuTTY is present (or we can find a copy on a file share), Plink can be our path to victory. We can use it to create our pivot and potentially avoid detection a little longer.
+
+### Getting to Know Plink
+
+```cmd-session
+plink -ssh -D 9050 ubuntu@10.129.15.50
+```
+- This is ran on the Windows Machine
+
