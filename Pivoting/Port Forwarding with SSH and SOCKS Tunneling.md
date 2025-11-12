@@ -1,0 +1,3 @@
+- Port forwarding is a technique that allows us to redirect a communication request from one port to another. 
+- Uses TCP as the primary communication layer to provide interactive communication for the forwarder port. 
+- 
