@@ -1,0 +1,1 @@
+- Based on our attacks thus far, the user adunn who has DCSync privileges in the INLANEFREIGHT.LOCAL domain. 
