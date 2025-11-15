@@ -141,3 +141,360 @@ Script     2.0.0      PSReadline                          {Get-PSReadLineKeyHand
 Now that we are running the old version of powershell, we can verify that we are not generating anymore logs by looking at the following event logs.
 
 - `Applications and Services Logs > Microsoft > Windows > PowerShell > Operational`.
+
+___________
+### Checking Defenses
+- We know to know what the status of the firewall is, we can use the netsh and sc utilities to find that information out. 
+
+```powershell-session
+PS C:\htb> netsh advfirewall show allprofiles
+
+Domain Profile Settings:
+----------------------------------------------------------------------
+State                                 OFF
+Firewall Policy                       BlockInbound,AllowOutbound
+LocalFirewallRules                    N/A (GPO-store only)
+LocalConSecRules                      N/A (GPO-store only)
+InboundUserNotification               Disable
+RemoteManagement                      Disable
+UnicastResponseToMulticast            Enable
+
+Logging:
+LogAllowedConnections                 Disable
+LogDroppedConnections                 Disable
+FileName                              %systemroot%\system32\LogFiles\Firewall\pfirewall.log
+MaxFileSize                           4096
+
+Private Profile Settings:
+----------------------------------------------------------------------
+State                                 OFF
+Firewall Policy                       BlockInbound,AllowOutbound
+LocalFirewallRules                    N/A (GPO-store only)
+LocalConSecRules                      N/A (GPO-store only)
+InboundUserNotification               Disable
+RemoteManagement                      Disable
+UnicastResponseToMulticast            Enable
+
+Logging:
+LogAllowedConnections                 Disable
+LogDroppedConnections                 Disable
+FileName                              %systemroot%\system32\LogFiles\Firewall\pfirewall.log
+MaxFileSize                           4096
+
+Public Profile Settings:
+----------------------------------------------------------------------
+State                                 OFF
+Firewall Policy                       BlockInbound,AllowOutbound
+LocalFirewallRules                    N/A (GPO-store only)
+LocalConSecRules                      N/A (GPO-store only)
+InboundUserNotification               Disable
+RemoteManagement                      Disable
+UnicastResponseToMulticast            Enable
+
+Logging:
+LogAllowedConnections                 Disable
+LogDroppedConnections                 Disable
+FileName                              %systemroot%\system32\LogFiles\Firewall\pfirewall.log
+MaxFileSize                           4096
+```
+
+**Windows Defender Check**
+```cmd-session
+C:\htb> sc query windefend
+
+SERVICE_NAME: windefend
+        TYPE               : 10  WIN32_OWN_PROCESS
+        STATE              : 4  RUNNING
+                                (STOPPABLE, NOT_PAUSABLE, ACCEPTS_SHUTDOWN)
+        WIN32_EXIT_CODE    : 0  (0x0)
+        SERVICE_EXIT_CODE  : 0  (0x0)
+        CHECKPOINT         : 0x0
+        WAIT_HINT          : 0x0
+```
+
+**Checking Defender Configurations:**
+```powershell-session
+PS C:\htb> Get-MpComputerStatus
+
+AMEngineVersion                  : 1.1.19000.8
+AMProductVersion                 : 4.18.2202.4
+AMRunningMode                    : Normal
+AMServiceEnabled                 : True
+AMServiceVersion                 : 4.18.2202.4
+AntispywareEnabled               : True
+AntispywareSignatureAge          : 0
+AntispywareSignatureLastUpdated  : 3/21/2022 4:06:15 AM
+AntispywareSignatureVersion      : 1.361.414.0
+AntivirusEnabled                 : True
+AntivirusSignatureAge            : 0
+AntivirusSignatureLastUpdated    : 3/21/2022 4:06:16 AM
+AntivirusSignatureVersion        : 1.361.414.0
+BehaviorMonitorEnabled           : True
+ComputerID                       : FDA97E38-1666-4534-98D4-943A9A871482
+ComputerState                    : 0
+DefenderSignaturesOutOfDate      : False
+DeviceControlDefaultEnforcement  : Unknown
+DeviceControlPoliciesLastUpdated : 3/20/2022 9:08:34 PM
+DeviceControlState               : Disabled
+FullScanAge                      : 4294967295
+FullScanEndTime                  :
+FullScanOverdue                  : False
+FullScanRequired                 : False
+FullScanSignatureVersion         :
+FullScanStartTime                :
+IoavProtectionEnabled            : True
+IsTamperProtected                : True
+IsVirtualMachine                 : False
+LastFullScanSource               : 0
+LastQuickScanSource              : 2
+
+<SNIP>
+```
+
+
+-----------
+### Are we Alone??
+- One of the most important things to check is whether or not we are the only ones that are logged in to the workstation. Imagine you try to log in with a user account and the user is then logged out out of thin air, that is going to be a little sus...
+
+```powershell-session
+PS C:\htb> qwinsta
+
+ SESSIONNAME       USERNAME                 ID  STATE   TYPE        DEVICE
+ services                                    0  Disc
+>console           forend                    1  Active
+ rdp-tcp                                 65536  Listen
+```
+
+--------
+### Network Enumeration
+- One way that we can use some of Windows commands is to enumerate some maybe the routing table or see if they have any static routes that may lead us to different hosts within the network. 
+
+**Using arp -a**
+```powershell-session
+PS C:\htb> arp -a
+
+Interface: 172.16.5.25 --- 0x8
+  Internet Address      Physical Address      Type
+  172.16.5.5            00-50-56-b9-08-26     dynamic
+  172.16.5.130          00-50-56-b9-f0-e1     dynamic
+  172.16.5.240          00-50-56-b9-9d-66     dynamic
+  224.0.0.22            01-00-5e-00-00-16     static
+  224.0.0.251           01-00-5e-00-00-fb     static
+  224.0.0.252           01-00-5e-00-00-fc     static
+  239.255.255.250       01-00-5e-7f-ff-fa     static
+
+Interface: 10.129.201.234 --- 0xc
+  Internet Address      Physical Address      Type
+  10.129.0.1            00-50-56-b9-b9-fc     dynamic
+  10.129.202.29         00-50-56-b9-26-8d     dynamic
+  10.129.255.255        ff-ff-ff-ff-ff-ff     static
+  224.0.0.22            01-00-5e-00-00-16     static
+  224.0.0.251           01-00-5e-00-00-fb     static
+  224.0.0.252           01-00-5e-00-00-fc     static
+  239.255.255.250       01-00-5e-7f-ff-fa     static
+  255.255.255.255       ff-ff-ff-ff-ff-ff     static
+```
+
+**Viewing the Routing Table**
+```powershell-session
+PS C:\htb> route print
+
+===========================================================================
+Interface List
+  8...00 50 56 b9 9d d9 ......vmxnet3 Ethernet Adapter #2
+ 12...00 50 56 b9 de 92 ......vmxnet3 Ethernet Adapter
+  1...........................Software Loopback Interface 1
+===========================================================================
+
+IPv4 Route Table
+===========================================================================
+Active Routes:
+Network Destination        Netmask          Gateway       Interface  Metric
+          0.0.0.0          0.0.0.0       172.16.5.1      172.16.5.25    261
+          0.0.0.0          0.0.0.0       10.129.0.1   10.129.201.234     20
+       10.129.0.0      255.255.0.0         On-link    10.129.201.234    266
+   10.129.201.234  255.255.255.255         On-link    10.129.201.234    266
+   10.129.255.255  255.255.255.255         On-link    10.129.201.234    266
+        127.0.0.0        255.0.0.0         On-link         127.0.0.1    331
+        127.0.0.1  255.255.255.255         On-link         127.0.0.1    331
+  127.255.255.255  255.255.255.255         On-link         127.0.0.1    331
+       172.16.4.0    255.255.254.0         On-link       172.16.5.25    261
+      172.16.5.25  255.255.255.255         On-link       172.16.5.25    261
+     172.16.5.255  255.255.255.255         On-link       172.16.5.25    261
+        224.0.0.0        240.0.0.0         On-link         127.0.0.1    331
+        224.0.0.0        240.0.0.0         On-link    10.129.201.234    266
+        224.0.0.0        240.0.0.0         On-link       172.16.5.25    261
+  255.255.255.255  255.255.255.255         On-link         127.0.0.1    331
+  255.255.255.255  255.255.255.255         On-link    10.129.201.234    266
+  255.255.255.255  255.255.255.255         On-link       172.16.5.25    261
+  ===========================================================================
+Persistent Routes:
+  Network Address          Netmask  Gateway Address  Metric
+          0.0.0.0          0.0.0.0       172.16.5.1  Default
+===========================================================================
+
+IPv6 Route Table
+===========================================================================
+
+<SNIP>
+```
+
+Using `arp -a` and `route print` will not only benefit in enumerating AD environments, but will also assist us in identifying opportunities to pivot to different network segments in any environment. These are commands we should consider using on each engagement to assist our clients in understanding where an attacker may attempt to go following initial compromise.
+
+----------- 
+### Windows Management Instrumentation
+- WMI is a windows scripting engine that is widely used within Windows enterprise environment to retrieve information and run admin tasks on local and remote hosts. 
+- We can create a WMI Report of the Users, Groups, processes, and other information from our host and other domain hosts.
+
+#### Quick WMI checks
+
+| **Command**                                                                          | **Description**                                                                                        |
+| ------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------ |
+| `wmic qfe get Caption,Description,HotFixID,InstalledOn`                              | Prints the patch level and description of the Hotfixes applied                                         |
+| `wmic computersystem get Name,Domain,Manufacturer,Model,Username,Roles /format:List` | Displays basic host information to include any attributes within the list                              |
+| `wmic process list /format:list`                                                     | A listing of all processes on host                                                                     |
+| `wmic ntdomain list /format:list`                                                    | Displays information about the Domain and Domain Controllers                                           |
+| `wmic useraccount list /format:list`                                                 | Displays information about all local accounts and any domain accounts that have logged into the device |
+| `wmic group list /format:list`                                                       | Information about all local groups                                                                     |
+| `wmic sysaccount list /format:list`                                                  | Dumps information about any system accounts that are being used as service accounts.                   |
+**Using the Above Command**
+```powershell-session
+PS C:\htb> wmic ntdomain get Caption,Description,DnsForestName,DomainName,DomainControllerAddress
+
+Caption          Description      DnsForestName           DomainControllerAddress  DomainName
+ACADEMY-EA-MS01  ACADEMY-EA-MS01
+INLANEFREIGHT    INLANEFREIGHT    INLANEFREIGHT.LOCAL     \\172.16.5.5             INLANEFREIGHT
+LOGISTICS        LOGISTICS        INLANEFREIGHT.LOCAL     \\172.16.5.240           LOGISTICS
+FREIGHTLOGISTIC  FREIGHTLOGISTIC  FREIGHTLOGISTICS.LOCAL  \\172.16.5.238           FREIGHTLOGISTIC
+```
+
+-------------------
+### Net Commands 
+- Net commands are a set of commands that allow a user to query other local or domain information. The following are some examples of the type of data that we can view using these commands. 
+	- Local and domain users
+	- Groups
+	- Hosts
+	- Specific users in groups
+	- Domain Controllers
+	- Password requirements
+
+- HEADS UP! net.exe is typically monitored by EDR solutions and can quickly give up our location if our assessment has an evasive component. 
+
+#### Table of Useful Net Commands
+
+| **Command**                                     | **Description**                                                                                                              |
+| ----------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------- |
+| `net accounts`                                  | Information about password requirements                                                                                      |
+| `net accounts /domain`                          | Password and lockout policy                                                                                                  |
+| `net group /domain`                             | Information about domain groups                                                                                              |
+| `net group "Domain Admins" /domain`             | List users with domain admin privileges                                                                                      |
+| `net group "domain computers" /domain`          | List of PCs connected to the domain                                                                                          |
+| `net group "Domain Controllers" /domain`        | List PC accounts of domains controllers                                                                                      |
+| `net group <domain_group_name> /domain`         | User that belongs to the group                                                                                               |
+| `net groups /domain`                            | List of domain groups                                                                                                        |
+| `net localgroup`                                | All available groups                                                                                                         |
+| `net localgroup administrators /domain`         | List users that belong to the administrators group inside the domain (the group `Domain Admins` is included here by default) |
+| `net localgroup Administrators`                 | Information about a group (admins)                                                                                           |
+| `net localgroup administrators [username] /add` | Add user to administrators                                                                                                   |
+| `net share`                                     | Check current shares                                                                                                         |
+| `net user <ACCOUNT_NAME> /domain`               | Get information about a user within the domain                                                                               |
+| `net user /domain`                              | List all users of the domain                                                                                                 |
+| `net user %username%`                           | Information about the current user                                                                                           |
+| `net use x: \computer\share`                    | Mount the share locally                                                                                                      |
+| `net view`                                      | Get a list of computers                                                                                                      |
+| `net view /all /domain[:domainname]`            | Shares on the domains                                                                                                        |
+| `net view \computer /ALL`                       | List shares of a computer                                                                                                    |
+| `net view /domain`                              | List of PCs of the domain                                                                                                    |
+- If we believe that EDR is in effect, we can use the command 'net1' instead of 'net' to evade logging of the commands. 
+
+-----------
+### Dsquery
+- Helpful command tool that can be utilized to find Active Directory objects. 
+- We do require for these commands to be ran as SYSTEM. 
+
+**User Search Using Dsquery**
+```powershell-session
+PS C:\htb> dsquery user
+
+"CN=Administrator,CN=Users,DC=INLANEFREIGHT,DC=LOCAL"
+"CN=Guest,CN=Users,DC=INLANEFREIGHT,DC=LOCAL"
+"CN=lab_adm,CN=Users,DC=INLANEFREIGHT,DC=LOCAL"
+"CN=krbtgt,CN=Users,DC=INLANEFREIGHT,DC=LOCAL"
+"CN=Htb Student,CN=Users,DC=INLANEFREIGHT,DC=LOCAL"
+"CN=Annie Vazquez,OU=Finance,OU=Financial-LON,OU=Employees,OU=Corp,DC=INLANEFREIGHT,DC=LOCAL"
+"CN=Paul Falcon,OU=Finance,OU=Financial-LON,OU=Employees,OU=Corp,DC=INLANEFREIGHT,DC=LOCAL"
+"CN=Fae Anthony,OU=Finance,OU=Financial-LON,OU=Employees,OU=Corp,DC=INLANEFREIGHT,DC=LOCAL"
+"CN=Walter Dillard,OU=Finance,OU=Financial-LON,OU=Employees,OU=Corp,DC=INLANEFREIGHT,DC=LOCAL"
+"CN=Louis Bradford,OU=Finance,OU=Financial-LON,OU=Employees,OU=Corp,DC=INLANEFREIGHT,DC=LOCAL"
+"CN=Sonya Gage,OU=Finance,OU=Financial-LON,OU=Employees,OU=Corp,DC=INLANEFREIGHT,DC=LOCAL"
+"CN=Alba Sanchez,OU=Finance,OU=Financial-LON,OU=Employees,OU=Corp,DC=INLANEFREIGHT,DC=LOCAL"
+"CN=Daniel Branch,OU=Finance,OU=Financial-LON,OU=Employees,OU=Corp,DC=INLANEFREIGHT,DC=LOCAL"
+"CN=Christopher Cruz,OU=Finance,OU=Financial-LON,OU=Employees,OU=Corp,DC=INLANEFREIGHT,DC=LOCAL"
+"CN=Nicole Johnson,OU=Finance,OU=Financial-LON,OU=Employees,OU=Corp,DC=INLANEFREIGHT,DC=LOCAL"
+"CN=Mary Holliday,OU=Human Resources,OU=HQ-NYC,OU=Employees,OU=Corp,DC=INLANEFREIGHT,DC=LOCAL"
+"CN=Michael Shoemaker,OU=Human Resources,OU=HQ-NYC,OU=Employees,OU=Corp,DC=INLANEFREIGHT,DC=LOCAL"
+"CN=Arlene Slater,OU=Human Resources,OU=HQ-NYC,OU=Employees,OU=Corp,DC=INLANEFREIGHT,DC=LOCAL"
+"CN=Kelsey Prentiss,OU=Human Resources,OU=HQ-NYC,OU=Employees,OU=Corp,DC=INLANEFREIGHT,DC=LOCAL"
+```
+
+**Computer Search**
+```powershell-session
+PS C:\htb> dsquery computer
+
+"CN=ACADEMY-EA-DC01,OU=Domain Controllers,DC=INLANEFREIGHT,DC=LOCAL"
+"CN=ACADEMY-EA-MS01,OU=Web Servers,OU=Servers,OU=Computers,OU=Corp,DC=INLANEFREIGHT,DC=LOCAL"
+"CN=ACADEMY-EA-MX01,OU=Mail,OU=Servers,OU=Computers,OU=Corp,DC=INLANEFREIGHT,DC=LOCAL"
+"CN=SQL01,OU=SQL Servers,OU=Servers,OU=Computers,OU=Corp,DC=INLANEFREIGHT,DC=LOCAL"
+"CN=ILF-XRG,OU=Critical,OU=Servers,OU=Computers,OU=Corp,DC=INLANEFREIGHT,DC=LOCAL"
+"CN=MAINLON,OU=Critical,OU=Servers,OU=Computers,OU=Corp,DC=INLANEFREIGHT,DC=LOCAL"
+"CN=CISERVER,OU=Critical,OU=Servers,OU=Computers,OU=Corp,DC=INLANEFREIGHT,DC=LOCAL"
+"CN=INDEX-DEV-LON,OU=LON,OU=Servers,OU=Computers,OU=Corp,DC=INLANEFREIGHT,DC=LOCAL"
+"CN=SQL-0253,OU=SQL Servers,OU=Servers,OU=Computers,OU=Corp,DC=INLANEFREIGHT,DC=LOCAL"
+"CN=NYC-0615,OU=NYC,OU=Servers,OU=Computers,OU=Corp,DC=INLANEFREIGHT,DC=LOCAL"
+"CN=NYC-0616,OU=NYC,OU=Servers,OU=Computers,OU=Corp,DC=INLANEFREIGHT,DC=LOCAL"
+"CN=NYC-0617,OU=NYC,OU=Servers,OU=Computers,OU=Corp,DC=INLANEFREIGHT,DC=LOCAL"
+"CN=NYC-0618,OU=NYC,OU=Servers,OU=Computers,OU=Corp,DC=INLANEFREIGHT,DC=LOCAL"
+"CN=NYC-0619,OU=NYC,OU=Servers,OU=Computers,OU=Corp,DC=INLANEFREIGHT,DC=LOCAL"
+"CN=NYC-0620,OU=NYC,OU=Servers,OU=Computers,OU=Corp,DC=INLANEFREIGHT,DC=LOCAL"
+"CN=NYC-0621,OU=NYC,OU=Servers,OU=Computers,OU=Corp,DC=INLANEFREIGHT,DC=LOCAL"
+"CN=NYC-0622,OU=NYC,OU=Servers,OU=Computers,OU=Corp,DC=INLANEFREIGHT,DC=LOCAL"
+"CN=NYC-0623,OU=NYC,OU=Servers,OU=Computers,OU=Corp,DC=INLANEFREIGHT,DC=LOCAL"
+"CN=LON-0455,OU=LON,OU=Servers,OU=Computers,OU=Corp,DC=INLANEFREIGHT,DC=LOCAL"
+"CN=LON-0456,OU=LON,OU=Servers,OU=Computers,OU=Corp,DC=INLANEFREIGHT,DC=LOCAL"
+"CN=LON-0457,OU=LON,OU=Servers,OU=Computers,OU=Corp,DC=INLANEFREIGHT,DC=LOCAL"
+"CN=LON-0458,OU=LON,OU=Servers,OU=Computers,OU=Corp,DC=INLANEFREIGHT,DC=LOCAL"
+```
+
+**Wildcard Search**
+```powershell-session
+PS C:\htb> dsquery * "CN=Users,DC=INLANEFREIGHT,DC=LOCAL"
+
+"CN=Users,DC=INLANEFREIGHT,DC=LOCAL"
+"CN=krbtgt,CN=Users,DC=INLANEFREIGHT,DC=LOCAL"
+"CN=Domain Computers,CN=Users,DC=INLANEFREIGHT,DC=LOCAL"
+"CN=Domain Controllers,CN=Users,DC=INLANEFREIGHT,DC=LOCAL"
+"CN=Schema Admins,CN=Users,DC=INLANEFREIGHT,DC=LOCAL"
+"CN=Enterprise Admins,CN=Users,DC=INLANEFREIGHT,DC=LOCAL"
+"CN=Cert Publishers,CN=Users,DC=INLANEFREIGHT,DC=LOCAL"
+"CN=Domain Admins,CN=Users,DC=INLANEFREIGHT,DC=LOCAL"
+"CN=Domain Users,CN=Users,DC=INLANEFREIGHT,DC=LOCAL"
+"CN=Domain Guests,CN=Users,DC=INLANEFREIGHT,DC=LOCAL"
+"CN=Group Policy Creator Owners,CN=Users,DC=INLANEFREIGHT,DC=LOCAL"
+"CN=RAS and IAS Servers,CN=Users,DC=INLANEFREIGHT,DC=LOCAL"
+"CN=Allowed RODC Password Replication Group,CN=Users,DC=INLANEFREIGHT,DC=LOCAL"
+"CN=Denied RODC Password Replication Group,CN=Users,DC=INLANEFREIGHT,DC=LOCAL"
+"CN=Read-only Domain Controllers,CN=Users,DC=INLANEFREIGHT,DC=LOCAL"
+"CN=Enterprise Read-only Domain Controllers,CN=Users,DC=INLANEFREIGHT,DC=LOCAL"
+"CN=Cloneable Domain Controllers,CN=Users,DC=INLANEFREIGHT,DC=LOCAL"
+"CN=Protected Users,CN=Users,DC=INLANEFREIGHT,DC=LOCAL"
+"CN=Key Admins,CN=Users,DC=INLANEFREIGHT,DC=LOCAL"
+"CN=Enterprise Key Admins,CN=Users,DC=INLANEFREIGHT,DC=LOCAL"
+"CN=DnsAdmins,CN=Users,DC=INLANEFREIGHT,DC=LOCAL"
+"CN=DnsUpdateProxy,CN=Users,DC=INLANEFREIGHT,DC=LOCAL"
+"CN=certsvc,CN=Users,DC=INLANEFREIGHT,DC=LOCAL"
+"CN=Jessica Ramsey,CN=Users,DC=INLANEFREIGHT,DC=LOCAL"
+"CN=svc_vmwaresso,CN=Users,DC=INLANEFREIGHT,DC=LOCAL"
+
+<SNIP>
+```
+
